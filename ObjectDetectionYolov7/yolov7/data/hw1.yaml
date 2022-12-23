@@ -1,0 +1,13 @@
+# COCO 2017 dataset http://cocodataset.org
+
+# train and val data as 1) directory: path/images/, 2) file: path/images.txt, or 3) list: [path1/images/, path2/images/]
+train: ./arranged_dataset/train
+val: ./arranged_dataset/valid
+test: ./arranged_dataset/test
+
+# number of classes
+nc: 8
+
+# class names
+names: [ 'Right_Scissors', 'Left_Scissors', 'Right_Needle_driver', 'Left_Needle_driver' ,'Right_Forceps',
+         'Left_Forceps', 'Right_Empty', 'Left_Empty' ]
