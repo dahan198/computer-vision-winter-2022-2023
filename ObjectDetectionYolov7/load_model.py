@@ -3,17 +3,8 @@ from yolov7.models.yolo import Model
 from yolov7.utils.torch_utils import ModelEMA, intersect_dicts
 import yaml
 
-# Load configuration file
-CFG = './yolov7/cfg/training/yolov7-tiny-hw1.yaml'
-
-# Load weights file
-WEIGHTS = './yolov7/runs/train/exp31/weights/best.pt'
-
 # Number of classes
 NC = 8
-
-# Hyperparameter file
-HYP = './yolov7/data/hyp.scratch.hw1.yaml'
 
 # Image size
 IMAGE_SIZE = 640
@@ -24,57 +15,74 @@ iou_thres = 0.1
 # Confidence threshold for non-maximum suppression
 conf_thres = 0.01
 
-# Load hyperparameters from YAML file
-with open(HYP) as f:
-    hyp = yaml.load(f, Loader=yaml.SafeLoader)
+HYP = './yolov7/data/hyp.scratch.exp1.yaml'
 
-# Set device to GPU if available, else set to CPU
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-# Initialize model
-model = Model(CFG, ch=3, nc=NC, anchors=None).to(device)
+def load_model(cfg='./yolov7/cfg/training/yolov7-tiny-exp1.yaml',
+               weights='./yolov7/runs/train/exp/weights/best.pt'):
+    """"
+        Loads a trained YOLOv7 model and returns initialized model.
+        
+    Args:
+        cfg (str): the path to the model configuration file in YAML format. It specifies the structure of the model.
+        weights (str): the path to the file containing the weights of the trained model.
+        
+    Returns:
+        nn.Module: initialized model. 
+    """""
 
-# Load checkpoint
-ckpt = torch.load(WEIGHTS, map_location=device)
+    # Load hyperparameters from YAML file
+    with open(HYP) as f:
+        hyp = yaml.load(f, Loader=yaml.SafeLoader)
 
-# Exclude certain keys from checkpoint
-exclude = ['anchor']
+    # Set device to GPU if available, else set to CPU
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-# Convert checkpoint model to FP32
-state_dict = ckpt['model'].float().state_dict()
+    # Initialize model
+    model = Model(cfg, ch=3, nc=NC, anchors=None).to(device)
 
-# Intersect state dict with model state dict, excluding certain keys
-state_dict = intersect_dicts(state_dict, model.state_dict(), exclude=exclude)
+    # Load checkpoint
+    ckpt = torch.load(weights, map_location=device)
 
-# Load state dict into model
-model.load_state_dict(state_dict, strict=False)
+    # Exclude certain keys from checkpoint
+    exclude = ['anchor']
 
-# Get number of layers in model
-nl = model.model[-1].nl
+    # Convert checkpoint model to FP32
+    state_dict = ckpt['model'].float().state_dict()
 
-# Initialize model exponential moving average (EMA)
-ema = ModelEMA(model)
+    # Intersect state dict with model state dict, excluding certain keys
+    state_dict = intersect_dicts(state_dict, model.state_dict(), exclude=exclude)
 
-# Scale boxes and classes to layers
-hyp['box'] *= 3. / nl
-hyp['cls'] *= NC / 80. * 3. / nl
+    # Load state dict into model
+    model.load_state_dict(state_dict, strict=False)
 
-# Scale object loss to image size and layers
-hyp['obj'] *= (IMAGE_SIZE / 640) ** 2 * 3. / nl
+    # Get number of layers in model
+    nl = model.model[-1].nl
 
-# Set label smoothing to 0
-hyp['label_smoothing'] = 0
+    # Initialize model exponential moving average (EMA)
+    ema = ModelEMA(model)
 
-# Set number of classes in model
-model.nc = NC
+    # Scale boxes and classes to layers
+    hyp['box'] *= 3. / nl
+    hyp['cls'] *= NC / 80. * 3. / nl
 
-# Set model intersection over union loss ratio
-model.gr = 1.0
+    # Scale object loss to image size and layers
+    hyp['obj'] *= (IMAGE_SIZE / 640) ** 2 * 3. / nl
 
-# Set model class names
-model.names = ['Right_Scissors', 'Left_Scissors', 'Right_Needle_driver', 'Left_Needle_driver', 'Right_Forceps',
-               'Left_Forceps', 'Right_Empty', 'Left_Empty']
+    # Set label smoothing to 0
+    hyp['label_smoothing'] = 0
 
-# Update model EMA
-ema.update_attr(model, include=['yaml', 'nc', 'hyp', 'gr', 'names', 'stride', 'class_weights'])
-model = ema.ema
+    # Set number of classes in model
+    model.nc = NC
+
+    # Set model intersection over union loss ratio
+    model.gr = 1.0
+
+    # Set model class names
+    model.names = ['Right_Scissors', 'Left_Scissors', 'Right_Needle_driver', 'Left_Needle_driver', 'Right_Forceps',
+                   'Left_Forceps', 'Right_Empty', 'Left_Empty']
+
+    # Update model EMA
+    ema.update_attr(model, include=['yaml', 'nc', 'hyp', 'gr', 'names', 'stride', 'class_weights'])
+    model = ema.ema
+    return model

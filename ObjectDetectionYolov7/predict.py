@@ -1,17 +1,20 @@
 import torch
+import sys
+sys.path.append('./yolov7')
+from load_model import load_model
 from PIL import Image
 import numpy as np
 from yolov7.utils.general import non_max_suppression
 from yolov7.utils.plots import plot_images, output_to_target
+import cv2
 
 
-def predict(model, image_path, show_predicted_image=False, iou_thres=0.1, conf_thres=0.01):
+def predict(image_path, show_predicted_image=True, iou_thres=0.1, conf_thres=0.01):
     """"
-        Given a model, an image path and optional parameters, returns a PIL image object with the predicted image.
+        Given an image path and optional parameters, returns a PIL image object with the predicted image.
         The predicted image will be plotted with predicted bounding boxes.
         
     Parameters:
-        model (torch.nn.Module): a trained PyTorch model for object detection.
         image_path (str): a string representing the path to the image file.
         show_predicted_image (bool, optional): whether to show the predicted image using the Image.show() method. 
                                                Defaults to False.
@@ -34,6 +37,7 @@ def predict(model, image_path, show_predicted_image=False, iou_thres=0.1, conf_t
     img = img.unsqueeze(0).permute(0, 3, 1, 2)
 
     # Make predictions with the model
+    model = load_model('./yolov7/cfg/training/yolov7-tiny-exp1.yaml', './yolov7/runs/train/exp/weights/best.pt')
     out, train_out = model(img)
     out = non_max_suppression(out, conf_thres=conf_thres, iou_thres=iou_thres, labels=[], multi_label=True)
 
@@ -44,12 +48,15 @@ def predict(model, image_path, show_predicted_image=False, iou_thres=0.1, conf_t
     target = output_to_target(out)
 
     # Plot predicted boxes on the image
-    image_result = Image.fromarray(plot_images(img, targets=target, names=names))
+    image_result = plot_images(img, targets=target, names=names)
+    image_result = cv2.cvtColor(image_result, cv2.COLOR_BGR2RGB)
 
     # Show image with predicted boxes if desired
     if show_predicted_image:
-        image_result.show()
+        cv2.imshow('result', image_result)
+        cv2.waitKey(0)
 
     return image_result
 
 
+predict("HW1_dataset/images/P016_balloon1_3881.jpg")

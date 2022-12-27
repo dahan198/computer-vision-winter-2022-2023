@@ -36,12 +36,14 @@ class SmoothedVideo:
         out = non_max_suppression(out, conf_thres=self.conf_thres, iou_thres=self.iou_thres, labels=[],
                                   multi_label=True)
         target = output_to_target(out)
+        if len(target) == 0:
+            return target
         target[:, 0] = 0
         return target
 
     def make_smooth(self, image):
         """"
-            Performs object detection on the given image and applies smoothing to the resulting predictions.
+            Perform object detection on the given image and applies smoothing to the resulting predictions.
 
         Parameters:
              image (A PIL image): an array of bounding boxes in the format [x1, y1, x2, y2, class_id, score]
@@ -58,10 +60,11 @@ class SmoothedVideo:
 
         # Get predictions for the image
         target = self.detect(img)
-        target = target[target[:, 6] > self.conf_thres]  # keeps predictions with a high enough confidence
-        target = self.remove_duplicate_boxes(target)  # removes duplicate boxes
-        target = target[target[:, 6].argsort(axis=0, kind='mergesort')][-2:, :]  # keeps the top two by confidence
-        target = self.fix_uncertain_labels(target)  # fixes uncertain labels
+        if len(target) <= 1:
+            target = self.predictions[-1]
+        else:
+            target = self.remain_left_right_labels(target)  # removes duplicate boxes
+            target = self.fix_uncertain_labels(target)  # fixes uncertain labels
 
         # Add the predictions for this image to the list of all predictions
         self.predictions.append(target)
@@ -69,39 +72,89 @@ class SmoothedVideo:
         # Create an image with the predictions drawn on it
         image_result = Image.fromarray(plot_images(img, targets=target, names=self.names))
 
-        return image_result
+        return image_result, target[:, 1]
 
-    @staticmethod
-    def remove_duplicate_boxes(target):
+    def remain_left_right_labels(self, target):
         """"
-            Removes duplicate bounding boxes from the given target array.
-            A box is considered a duplicate if its coordinates (x1, y1, x2, y2) are within 2 pixels of another box.
-            If two boxes have the same coordinates, the box with the higher score is kept.
+            Remain only two labels, one for the left hand and the another for the right hand.
 
-        Parameters:
-            target (numpy array): an array of bounding boxes in the format [x1, y1, x2, y2, class_id, score]
-
+        Args:
+           target (np.array): a 2D NumPy array containing multiple bounding boxes information and their labels.
+        
         Returns:
-            target (numpy array): the input array with duplicate boxes removed
+           numpy array: a 2D NumPy array containing two bounding boxes information and their labels.
         """""
 
-        boxes_num = len(target)  # number of bounding boxes in the target array
-        indices = list(range(boxes_num))  # list of indices to keep
+        # Get the number of bounding boxes in the target array
+        boxes_num = len(target)
+        # Get a boolean array indicating whether the label is odd or even
+        odd = (target[:, 1] % 2).astype(bool)
 
-        for i in range(boxes_num):
-            for j in range(i + 1, boxes_num):
-                # If the distance between the coordinates of the two boxes is less than or equal to 2 pixels:
-                if np.linalg.norm(target[i][:4] - target[j][:4]) <= 2:
-                    # If the score of box i is greater than that of box j:
-                    if target[i][5] > target[j][5]:
-                        # Remove box j from the list of indices to keep:
-                        indices.remove(j)
-                    else:
-                        # Otherwise, remove box i:
-                        indices.remove(i)
+        # If there are only two boxes, check if they are both odd or both even
+        # If they are, return the boxes. If not, return the box with the highest confidence
+        if boxes_num == 2:
+            if odd[0] != odd[1] and np.linalg.norm(target[0][2] - target[1][2]) > 50:
+                return target
+            else:
+                max_conf = np.argmax(target[:, 6])
+                return self.add_second_label(target[max_conf])
 
-        # Return the target array with only the boxes at the indices in the list of indices to keep:
-        return target[indices]
+        # Get the indices of the odd and even labels
+        indices = np.array(range(boxes_num))
+        left = indices[odd]
+        left_confidences = target[odd, 6]
+        right = indices[~odd]
+        right_confidences = target[~odd, 6]
+
+        # If there are no odd or even labels, return the box with the highest confidence
+        if len(right) == 0 or len(left) == 0:
+            max_conf = np.argmax(target[:, 6])
+            return self.add_second_label(target[max_conf])
+
+        # Sort the right and left labels by confidence in descending order
+        best_right = list(reversed(np.argsort(right_confidences)))
+        best_left = list(reversed(np.argsort(left_confidences)))
+
+        # Calculate the distance between each pair of right and left labels
+        # If the distance is greater than 50, return the pair
+        distances = []
+        indices_by_distance = []
+        for right_idx in best_right:
+            for left_idx in best_left:
+                distances.append(np.linalg.norm(target[right[right_idx]][2] - target[left[left_idx]][2]))
+                indices_by_distance.append([right_idx, left_idx])
+                if distances[-1] > 50:
+                    return target[[right[right_idx], left[left_idx]]]
+
+        # If no pairs are found with a distance greater than 50, return the box with the highest confidence
+        max_conf = np.argmax(target[:, 6])
+        return self.add_second_label(target[max_conf])
+
+    def add_second_label(self, target):
+        """"
+            Add a second label to the target array. 
+            The label is selected from the predictions array using the distance from the target label.
+            The label with the maximum distance is chosen.
+            
+        Parameters:
+            target (numpy array): array containing a single label with 7 elements  
+                                  [label, x, y, w, h, confidence, class_id]
+
+        Returns:
+            numpy array: array containing 2 labels with 7 elements each
+        """""
+
+        # Calculate the distance between the target label and all the labels in the predictions array
+        distance = np.linalg.norm(self.predictions[-1][:, 2:3] - target[2], axis=1)
+
+        # Get the index of the label with the maximum distance
+        second_index = np.argmax(distance)
+
+        # Modify the label in the target array to be the label with the maximum distance
+        target[1] = self.predictions[-1][1 - second_index][1]
+
+        # Return the target array and the label with the maximum distance as a numpy array
+        return np.vstack([target, self.predictions[-1][second_index]])
 
     def fix_uncertain_labels(self, target):
         """"
