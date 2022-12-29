@@ -58,5 +58,3 @@ def predict(image_path, show_predicted_image=True, iou_thres=0.1, conf_thres=0.0
 
     return image_result
 
-
-predict("HW1_dataset/images/P016_balloon1_3881.jpg")
