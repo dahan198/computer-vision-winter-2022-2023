@@ -1,0 +1,9 @@
+               Class      Images      Labels           P           R      AP@.25       AP@.5      AP@.75
+                 all         199         398       0.649       0.621       0.693       0.682        0.63
+      Right_Scissors         199          42       0.823        0.81       0.894       0.894        0.87
+       Left_Scissors         199           1           0           0      0.0232      0.0232           0
+ Right_Needle_driver         199         137       0.983       0.838       0.979       0.953       0.864
+  Left_Needle_driver         199          10       0.491       0.484       0.457       0.412       0.295
+        Left_Forceps         199         109       0.918       0.615       0.845        0.84       0.797
+         Right_Empty         199          20        0.63        0.65         0.8         0.8       0.733
+          Left_Empty         199          79       0.698       0.949       0.852       0.852       0.852
